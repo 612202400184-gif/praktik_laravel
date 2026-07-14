@@ -15,6 +15,8 @@
                     <form action="{{ route('pegawai.cetak_pdf') }}" method="POST" id="formCetakPdf" target="_blank">
                         @csrf
                         <input type="hidden" name="chart_base64" id="chart_base64">
+                        {{-- Mengirimkan nilai filter aktif saat ini ke mPDF agar output PDF sama dengan filter halaman --}}
+                        <input type="hidden" name="skpd" value="{{ request('skpd') }}">
                         <button type="button" id="btnCetak" class="btn btn-danger btn-sm px-3 shadow-sm">
                             <i class="fas fa-file-pdf me-1"></i> Cetak Laporan PDF (mPDF)
                         </button>
@@ -30,18 +32,44 @@
         </div>
     </div>
 
-    {{-- 2. SECTION UTAMA: TABEL DATA PEGAWAI --}}
+    {{-- 2. SECTION UTAMA: TABEL DATA PEGAWAI DENGAN FILTER DROPDOWN --}}
     <div class="row justify-content-center">
         <div class="col-md-12">
             <div class="card shadow-sm border-0">
-                <div class="card-header d-flex justify-content-between align-items-center bg-white py-3 border-bottom">
-                    <h5 class="mb-0 fw-bold text-secondary">Daftar Pegawai Sesuai Hak Akses</h5>
-                    {{-- Tombol Tambah hanya untuk Admin & Operator --}}
-                    @if(auth()->user()->role == 'admin' || auth()->user()->role == 'operator')
-                        <a href="{{ route('pegawai.create') }}" class="btn btn-primary btn-sm px-3 shadow-sm">
-                            <i class="fas fa-plus me-1"></i> Tambah Pegawai
-                        </a>
-                    @endif
+                <div class="card-header bg-white py-3 border-bottom">
+                    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+                        <div>
+                            <h5 class="mb-0 fw-bold text-secondary">Daftar Pegawai Sesuai Hak Akses</h5>
+                        </div>
+                        
+                        {{-- [BARU] KOMPONEN FILTER INTERAKTIF DROPDOWN --}}
+                        <div class="flex-grow-1 mx-md-4" style="max-width: 380px;">
+                            <form action="{{ route('pegawai.index') }}" method="GET" id="formFilterSkpd">
+                                <div class="input-group input-group-sm shadow-sm">
+                                    <span class="input-group-text bg-light text-secondary border-end-0">
+                                        <i class="fas fa-filter me-1"></i> Filter SKPD
+                                    </span>
+                                    <select name="skpd" class="form-select text-secondary fw-semibold" onchange="document.getElementById('formFilterSkpd').submit();">
+                                        <option value="">-- Tampilkan Semua SKPD --</option>
+                                        @foreach($allSkpd as $skpdOption)
+                                            <option value="{{ $skpdOption }}" {{ request('skpd') == $skpdOption ? 'selected' : '' }}>
+                                                {{ $skpdOption }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                            </form>
+                        </div>
+
+                        {{-- Tombol Tambah hanya untuk Admin & Operator --}}
+                        <div>
+                            @if(auth()->user()->role == 'admin' || auth()->user()->role == 'operator')
+                                <a href="{{ route('pegawai.create') }}" class="btn btn-primary btn-sm px-3 shadow-sm">
+                                    <i class="fas fa-plus me-1"></i> Tambah Pegawai
+                                </a>
+                            @endif
+                        </div>
+                    </div>
                 </div>
 
                 <div class="card-body">
@@ -111,7 +139,7 @@
                                 @empty
                                     <tr>
                                         <td colspan="7" class="text-center text-muted py-4">
-                                            <i class="fas fa-folder-open d-block mb-2 fa-2x"></i> Data pegawai masih kosong.
+                                            <i class="fas fa-folder-open d-block mb-2 fa-2x"></i> Data pegawai tidak ditemukan atau masih kosong.
                                         </td>
                                     </tr>
                                 @endforelse

@@ -10,19 +10,31 @@ use Mpdf\Mpdf;
 
 class PegawaiController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $pegawai = Pegawai::all();
-        
-        // Ambil data agregat untuk Chart (Jumlah Pegawai per SKPD)
-        $chartData = Pegawai::select('skpd', DB::raw('count(*) as total'))
-                            ->groupBy('skpd')
-                            ->get();
+        // 1. Ambil daftar unik semua nama SKPD untuk mengisi opsi pilihan di elemen Dropdown
+        $allSkpd = Pegawai::select('skpd')->groupBy('skpd')->pluck('skpd')->toArray();
 
+        // 2. Buat instance Query Builder dasar untuk Tabel dan Chart
+        $pegawaiQuery = Pegawai::query();
+        $chartQuery = Pegawai::select('skpd', DB::raw('count(*) as total'))->groupBy('skpd');
+
+        // 3. Logika Filter Interaktif: Jika user memilih SKPD tertentu di dropdown form
+        if ($request->filled('skpd')) {
+            $pegawaiQuery->where('skpd', $request->skpd);
+            $chartQuery->where('skpd', $request->skpd); // Grafik ikut terfilter
+        }
+
+        // 4. Eksekusi pengambilan data akhir dari database MySQL
+        $pegawai = $pegawaiQuery->get();
+        $chartData = $chartQuery->get();
+
+        // 5. Ekstraksi data array untuk kebutuhan komponen Chart.js di frontend
         $chartLabels = $chartData->pluck('skpd')->toArray();
         $chartTotals = $chartData->pluck('total')->toArray();
 
-        return view('pegawai.index', compact('pegawai', 'chartLabels', 'chartTotals'));
+        // 6. Kirim variabel baru ($allSkpd) ke halaman View index
+        return view('pegawai.index', compact('pegawai', 'chartLabels', 'chartTotals', 'allSkpd'));
     }
 
     public function create()
@@ -103,24 +115,30 @@ class PegawaiController extends Controller
     }
 
     /**
-     * MENCETAK LAPORAN MENGGUNAKAN mPDF
+     * MENCETAK LAPORAN MENGGUNAKAN mPDF (Mendukung Sinkronisasi Filter)
      */
     public function cetakPdf(Request $request)
     {
-        // 1. Ambil data rekapitulasi pegawai per SKPD untuk tabel laporan
-        $rekapSkpd = Pegawai::select('skpd', DB::raw('count(*) as total'))
-                            ->groupBy('skpd')
-                            ->get();
-        
-        $totalPegawaiSemesta = Pegawai::count();
+        // 1. Buat query rekapitulasi dasar
+        $rekapQuery = Pegawai::select('skpd', DB::raw('count(*) as total'))->groupBy('skpd');
+        $totalQuery = Pegawai::query();
 
-        // 2. Ambil gambar Chart.js (format base64) dari frontend hidden input
+        // 2. Filter data PDF disesuaikan dengan filter halaman index yang sedang aktif
+        if ($request->filled('skpd')) {
+            $rekapQuery->where('skpd', $request->skpd);
+            $totalQuery->where('skpd', $request->skpd);
+        }
+
+        $rekapSkpd = $rekapQuery->get();
+        $totalPegawaiSemesta = $totalQuery->count();
+
+        // 3. Ambil gambar Chart.js (format base64) dari frontend hidden input
         $chartImage = $request->input('chart_base64');
 
-        // 3. Render file blade menjadi string HTML murni agar bisa dibaca mPDF
+        // 4. Render file blade menjadi string HTML murni agar bisa dibaca mPDF
         $html = view('pegawai.cetak_pdf', compact('rekapSkpd', 'totalPegawaiSemesta', 'chartImage'))->render();
 
-        // 4. Inisialisasi mPDF dengan format kertas A4 Portrait dan margin standar (15mm)
+        // 5. Inisialisasi mPDF dengan format kertas A4 Portrait dan margin standar (15mm)
         $mpdf = new Mpdf([
             'mode' => 'utf-8',
             'format' => 'A4',
@@ -130,7 +148,7 @@ class PegawaiController extends Controller
             'margin_bottom' => 15,
         ]);
 
-        // 5. Masukkan HTML ke dokumen mPDF dan unduh otomatis file-nya
+        // 6. Masukkan HTML ke dokumen mPDF dan unduh otomatis file-nya
         $mpdf->WriteHTML($html);
         
         return $mpdf->Output('Laporan_Distribusi_Pegawai_' . date('Y-m-d') . '.pdf', \Mpdf\Output\Destination::DOWNLOAD);
